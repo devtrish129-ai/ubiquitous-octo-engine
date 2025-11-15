@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisIEon - Real-time Detection</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- TensorFlow.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8/dist/teachablemachine-image.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .prediction-bar {
+            transition: width 0.3s ease-out;
+        }
+        
+        .webcam-container {
+            position: relative;
+            border-radius: 1rem;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+        }
+        
+        #webcam-container canvas {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .status-indicator {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: .5;
+            }
+        }
+        
+        .card-shadow {
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 to-slate-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-5xl font-bold text-slate-800 mb-3">
+                VisIEon
+            </h1>
+            <p class="text-lg text-slate-600 font-medium">
+                Real-time AI Detection System
+            </p>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-8 max-w-7xl mx-auto">
+            <!-- Webcam Section -->
+            <div class="bg-white rounded-2xl p-6 card-shadow">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-2xl font-bold text-slate-800">Live Feed</h2>
+                    <div id="statusIndicator" class="flex items-center gap-2">
+                        <span class="h-3 w-3 rounded-full bg-red-500 status-indicator"></span>
+                        <span id="statusText" class="text-sm font-medium text-slate-600">Initializing...</span>
+                    </div>
+                </div>
+                
+                <div class="webcam-container bg-slate-900">
+                    <div id="webcam-container" class="aspect-video flex items-center justify-center bg-slate-900">
+                        <div id="loading-indicator" class="text-white text-center">
+                            <svg class="animate-spin h-12 w-12 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p class="text-lg font-medium">Loading camera...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 flex gap-3">
+                    <button id="startButton" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                        Start Detection
+                    </button>
+                    <button id="stopButton" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        Stop Detection
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="bg-white rounded-2xl p-6 card-shadow">
+                <h2 class="text-2xl font-bold text-slate-800 mb-4">Detection Results</h2>
+                
+                <!-- Current Detection -->
+                <div id="currentDetection" class="mb-6 p-6 rounded-xl bg-gradient-to-r from-slate-50 to-slate-100 border-2 border-slate-200">
+                    <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">Current Status</p>
+                    <p id="topPrediction" class="text-3xl font-bold text-slate-800">
+                        Waiting for detection...
+                    </p>
+                    <p id="topConfidence" class="text-lg font-medium text-slate-600 mt-1">
+                        --%
+                    </p>
+                </div>
+
+                <!-- All Predictions -->
+                <div id="predictions" class="space-y-4">
+                    <div class="prediction-item">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-semibold text-slate-700 text-sm">Normal Condition</span>
+                            <span id="pred-0-value" class="font-bold text-slate-900 text-sm">0%</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                            <div id="pred-0-bar" class="prediction-bar bg-green-500 h-3 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="prediction-item">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-semibold text-slate-700 text-sm">Seal Integrity Defect</span>
+                            <span id="pred-1-value" class="font-bold text-slate-900 text-sm">0%</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                            <div id="pred-1-bar" class="prediction-bar bg-amber-500 h-3 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="prediction-item">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="font-semibold text-slate-700 text-sm">Label Misalignment Defect</span>
+                            <span id="pred-2-value" class="font-bold text-slate-900 text-sm">0%</span>
+                        </div>
+                        <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                            <div id="pred-2-bar" class="prediction-bar bg-red-500 h-3 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics -->
+                <div class="mt-6 pt-6 border-t-2 border-slate-200">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="text-center p-4 bg-slate-50 rounded-lg">
+                            <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">FPS</p>
+                            <p id="fpsCounter" class="text-2xl font-bold text-slate-800">0</p>
+                        </div>
+                        <div class="text-center p-4 bg-slate-50 rounded-lg">
+                            <p class="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Total Detections</p>
+                            <p id="detectionCounter" class="text-2xl font-bold text-slate-800">0</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug Console -->
+        <div class="mt-8 max-w-7xl mx-auto">
+            <div class="bg-slate-900 rounded-2xl p-6 card-shadow">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-white">Debug Console</h2>
+                    <button id="clearLogButton" class="bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 text-sm">
+                        Clear Logs
+                    </button>
+                </div>
+                <div id="debugConsole" class="bg-slate-950 rounded-lg p-4 h-64 overflow-y-auto font-mono text-xs text-green-400 space-y-1">
+                    <div class="text-slate-500">[System] Debug console initialized. Waiting for events...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Info -->
+        <div class="mt-8 text-center">
+            <p class="text-sm text-slate-500">
+                Powered by TensorFlow.js & Teachable Machine
+            </p>
+        </div>
+    </div>
+
+    <script>
+        // Model URL - relative path to the model folder
+        const URL = "./tm-my-image-model/";
+
+        let model, webcam, maxPredictions;
+        let isDetecting = false;
+        let detectionCount = 0;
+        let lastTime = Date.now();
+        let fps = 0;
+        
+        // Debug logging function
+        function debugLog(message, type = 'info') {
+            const debugConsoleElement = document.getElementById('debugConsole');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            
+            let color = 'text-green-400';
+            let prefix = '[INFO]';
+            
+            switch(type) {
+                case 'error':
+                    color = 'text-red-400';
+                    prefix = '[ERROR]';
+                    break;
+                case 'warning':
+                    color = 'text-yellow-400';
+                    prefix = '[WARN]';
+                    break;
+                case 'success':
+                    color = 'text-blue-400';
+                    prefix = '[SUCCESS]';
+                    break;
+                case 'prediction':
+                    color = 'text-purple-400';
+                    prefix = '[PREDICT]';
+                    break;
+            }
+            
+            logEntry.className = color;
+            logEntry.textContent = `[${timestamp}] ${prefix} ${message}`;
+            debugConsoleElement.appendChild(logEntry);
+            debugConsoleElement.scrollTop = debugConsoleElement.scrollHeight;
+            
+            // Also log to browser console
+            window.console.log(`${prefix} ${message}`);
+        }
+
+        // Initialize the application
+        async function init() {
+            try {
+                debugLog('Starting initialization...', 'info');
+                updateStatus('loading', 'Loading model...');
+                
+                // Load the model and metadata
+                const modelURL = URL + "model.json";
+                const metadataURL = URL + "metadata.json";
+                
+                debugLog(`Loading model from: ${modelURL}`, 'info');
+                debugLog(`Loading metadata from: ${metadataURL}`, 'info');
+                
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+                
+                debugLog(`Model loaded successfully! Total classes: ${maxPredictions}`, 'success');
+                
+                // Setup webcam
+                const flip = true; // flip the webcam
+                debugLog('Initializing webcam (640x480)...', 'info');
+                webcam = new tmImage.Webcam(640, 480, flip);
+                await webcam.setup();
+                debugLog('Webcam setup complete!', 'success');
+                
+                // Replace loading indicator with webcam
+                const container = document.getElementById("webcam-container");
+                const loadingIndicator = document.getElementById("loading-indicator");
+                if (loadingIndicator) {
+                    loadingIndicator.remove();
+                }
+                container.style.display = 'block';
+                container.style.background = 'transparent';
+                container.appendChild(webcam.canvas);
+                
+                // Start webcam feed
+                await webcam.play();
+                debugLog('Webcam feed started', 'success');
+                
+                // Keep webcam updating even when not detecting
+                updateWebcamFeed();
+                debugLog('Continuous webcam update loop initiated', 'info');
+                
+                updateStatus('ready', 'Ready');
+                document.getElementById('startButton').disabled = false;
+                debugLog('System ready! Click "Start Detection" to begin.', 'success');
+                
+            } catch (error) {
+                debugLog(`Initialization error: ${error.message}`, 'error');
+                debugLog(`Error stack: ${error.stack}`, 'error');
+                console.error('Error initializing:', error);
+                updateStatus('error', 'Error: ' + error.message);
+                alert('Failed to initialize. Please check console for details.');
+            }
+        }
+
+        // Start detection
+        async function startDetection() {
+            if (!webcam || isDetecting) return;
+            
+            debugLog('Starting detection mode...', 'info');
+            debugLog(`Model classes: ${maxPredictions}`, 'info');
+            
+            isDetecting = true;
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('stopButton').disabled = false;
+            updateStatus('active', 'Detecting...');
+            
+            debugLog('Detection loop started', 'success');
+            window.requestAnimationFrame(loop);
+        }
+
+        // Stop detection
+        function stopDetection() {
+            debugLog('Stopping detection mode...', 'warning');
+            isDetecting = false;
+            document.getElementById('startButton').disabled = false;
+            document.getElementById('stopButton').disabled = true;
+            updateStatus('stopped', 'Stopped');
+            debugLog('Detection stopped. Webcam feed continues.', 'info');
+        }
+
+        // Keep webcam feed updating continuously
+        function updateWebcamFeed() {
+            if (webcam) {
+                webcam.update();
+            }
+            window.requestAnimationFrame(updateWebcamFeed);
+        }
+
+        // Main detection loop
+        async function loop() {
+            if (!isDetecting) return;
+            
+            await predict();
+            
+            // Calculate FPS
+            const currentTime = Date.now();
+            const timeDiff = currentTime - lastTime;
+            if (timeDiff >= 1000) {
+                document.getElementById('fpsCounter').textContent = Math.round(fps);
+                fps = 0;
+                lastTime = currentTime;
+            }
+            fps++;
+            
+            window.requestAnimationFrame(loop);
+        }
+
+        // Make predictions
+        async function predict() {
+            try {
+                debugLog('Running prediction...', 'prediction');
+                
+                // Check if webcam canvas exists and has content
+                if (!webcam.canvas) {
+                    debugLog('ERROR: Webcam canvas not found!', 'error');
+                    return;
+                }
+                
+                debugLog(`Canvas dimensions: ${webcam.canvas.width}x${webcam.canvas.height}`, 'info');
+                
+                const prediction = await model.predict(webcam.canvas);
+                
+                debugLog(`Received ${prediction.length} predictions`, 'prediction');
+                
+                // Sort predictions by probability
+                const sorted = prediction.sort((a, b) => b.probability - a.probability);
+                
+                // Update top prediction
+                const topPred = sorted[0];
+                document.getElementById('topPrediction').textContent = topPred.className;
+                document.getElementById('topConfidence').textContent = 
+                    (topPred.probability * 100).toFixed(1) + '%';
+                
+                // Log all predictions
+                let predictionLog = 'Predictions: ';
+                prediction.forEach((pred, i) => {
+                    predictionLog += `${pred.className}: ${(pred.probability * 100).toFixed(1)}% | `;
+                });
+                debugLog(predictionLog, 'prediction');
+                
+                // Update all prediction bars
+                for (let i = 0; i < maxPredictions; i++) {
+                    const percentage = (prediction[i].probability * 100).toFixed(1);
+                    document.getElementById(`pred-${i}-value`).textContent = percentage + '%';
+                    document.getElementById(`pred-${i}-bar`).style.width = percentage + '%';
+                }
+                
+                // Update detection counter
+                detectionCount++;
+                document.getElementById('detectionCounter').textContent = detectionCount;
+                
+                debugLog(`Top result: ${topPred.className} (${(topPred.probability * 100).toFixed(1)}%)`, 'success');
+                
+                // Color code the current detection based on the result
+                const currentDetectionDiv = document.getElementById('currentDetection');
+                if (topPred.className === 'Normal Condition') {
+                    currentDetectionDiv.className = 'mb-6 p-6 rounded-xl bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-300';
+                    document.getElementById('topPrediction').className = 'text-3xl font-bold text-green-800';
+                } else if (topPred.className === 'Seal Integrity Defect') {
+                    currentDetectionDiv.className = 'mb-6 p-6 rounded-xl bg-gradient-to-r from-amber-50 to-amber-100 border-2 border-amber-300';
+                    document.getElementById('topPrediction').className = 'text-3xl font-bold text-amber-800';
+                } else {
+                    currentDetectionDiv.className = 'mb-6 p-6 rounded-xl bg-gradient-to-r from-red-50 to-red-100 border-2 border-red-300';
+                    document.getElementById('topPrediction').className = 'text-3xl font-bold text-red-800';
+                }
+            } catch (error) {
+                debugLog(`Prediction error: ${error.message}`, 'error');
+                debugLog(`Error details: ${error.stack}`, 'error');
+            }
+        }
+
+        // Update status indicator
+        function updateStatus(status, text) {
+            const indicator = document.querySelector('#statusIndicator .status-indicator');
+            const statusText = document.getElementById('statusText');
+            
+            statusText.textContent = text;
+            
+            switch(status) {
+                case 'loading':
+                    indicator.className = 'h-3 w-3 rounded-full bg-yellow-500 status-indicator';
+                    break;
+                case 'ready':
+                    indicator.className = 'h-3 w-3 rounded-full bg-blue-500';
+                    break;
+                case 'active':
+                    indicator.className = 'h-3 w-3 rounded-full bg-green-500 status-indicator';
+                    break;
+                case 'stopped':
+                    indicator.className = 'h-3 w-3 rounded-full bg-gray-500';
+                    break;
+                case 'error':
+                    indicator.className = 'h-3 w-3 rounded-full bg-red-500';
+                    break;
+            }
+        }
+
+        // Clear debug log
+        function clearLog() {
+            const debugConsoleElement = document.getElementById('debugConsole');
+            debugConsoleElement.innerHTML = '<div class="text-slate-500">[System] Debug console cleared.</div>';
+            debugLog('Console cleared by user', 'info');
+        }
+
+        // Event listeners
+        document.getElementById('startButton').addEventListener('click', startDetection);
+        document.getElementById('stopButton').addEventListener('click', stopDetection);
+        document.getElementById('clearLogButton').addEventListener('click', clearLog);
+
+        // Initialize on page load
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
