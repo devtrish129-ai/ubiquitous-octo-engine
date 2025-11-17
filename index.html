@@ -131,7 +131,7 @@
 
                     <div class="prediction-item">
                         <div class="flex justify-between items-center mb-2">
-                            <span class="font-semibold text-slate-700 text-sm">Seal Integrity Defect</span>
+                            <span class="font-semibold text-slate-700 text-sm">Seal Integrity</span>
                             <span id="pred-1-value" class="font-bold text-slate-900 text-sm">0%</span>
                         </div>
                         <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
@@ -141,7 +141,7 @@
 
                     <div class="prediction-item">
                         <div class="flex justify-between items-center mb-2">
-                            <span class="font-semibold text-slate-700 text-sm">Label Misalignment Defect</span>
+                            <span class="font-semibold text-slate-700 text-sm">Label Misplacement</span>
                             <span id="pred-2-value" class="font-bold text-slate-900 text-sm">0%</span>
                         </div>
                         <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
@@ -396,7 +396,7 @@
                 if (topPred.className === 'Normal Condition') {
                     currentDetectionDiv.className = 'mb-6 p-6 rounded-xl bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-300';
                     document.getElementById('topPrediction').className = 'text-3xl font-bold text-green-800';
-                } else if (topPred.className === 'Seal Integrity Defect') {
+                } else if (topPred.className === 'Seal Integrity') {
                     currentDetectionDiv.className = 'mb-6 p-6 rounded-xl bg-gradient-to-r from-amber-50 to-amber-100 border-2 border-amber-300';
                     document.getElementById('topPrediction').className = 'text-3xl font-bold text-amber-800';
                 } else {
